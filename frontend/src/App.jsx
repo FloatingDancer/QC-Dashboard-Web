@@ -306,7 +306,7 @@ export default function App() {
   const fetchProducts = async () => {
     try {
       setLoadingProducts(true);
-      const res = await fetch('http://localhost:8000/api/products');
+      const res = await fetch('/api/products');
       if (res.ok) {
         const data = await res.json();
         setProducts(data);
@@ -325,28 +325,28 @@ export default function App() {
     setLoadingDashboard(true);
     try {
       // 1. Fetch summary
-      const summaryRes = await fetch('http://localhost:8000/api/dashboard/summary');
+      const summaryRes = await fetch('/api/dashboard/summary');
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         setSummary(summaryData);
       }
 
       // 2. Fetch Pareto data (filtered dynamically if product selected, otherwise overall)
-      const defectRes = await fetch(`http://localhost:8000/api/dashboard/defect-distribution${selectedProductId ? `?product_id=${selectedProductId}` : ''}`);
+      const defectRes = await fetch(`/api/dashboard/defect-distribution${selectedProductId ? `?product_id=${selectedProductId}` : ''}`);
       if (defectRes.ok) {
         const defectData = await defectRes.json();
         setDefectDistData(defectData);
       }
 
       // 3. Fetch vendor ratings
-      const vendorRes = await fetch('http://localhost:8000/api/dashboard/vendor-ratings');
+      const vendorRes = await fetch('/api/dashboard/vendor-ratings');
       if (vendorRes.ok) {
         const vendorData = await vendorRes.json();
         setVendorRatings(vendorData);
       }
 
       // 4. Fetch history log
-      const historyRes = await fetch('http://localhost:8000/api/qc/history');
+      const historyRes = await fetch('/api/qc/history');
       if (historyRes.ok) {
         const historyData = await historyRes.json();
         setHistory(historyData);
@@ -367,14 +367,14 @@ export default function App() {
     setLoadingChart(true);
     try {
       // Fetch Control Chart data
-      const res = await fetch(`http://localhost:8000/api/dashboard/control-chart?product_id=${productId}`);
+      const res = await fetch(`/api/dashboard/control-chart?product_id=${productId}`);
       if (res.ok) {
         const chartData = await res.json();
         setControlChartData(chartData);
       }
       
       // Fetch Dynamic defect Pareto for this product
-      const defectRes = await fetch(`http://localhost:8000/api/dashboard/defect-distribution?product_id=${productId}`);
+      const defectRes = await fetch(`/api/dashboard/defect-distribution?product_id=${productId}`);
       if (defectRes.ok) {
         const defectData = await defectRes.json();
         setDefectDistData(defectData);
@@ -414,7 +414,7 @@ export default function App() {
     };
     
     try {
-      const res = await fetch(`http://localhost:8000/api/products/${editingProductId}`, {
+      const res = await fetch(`/api/products/${editingProductId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -447,7 +447,7 @@ export default function App() {
     };
     
     try {
-      const res = await fetch('http://localhost:8000/api/products', {
+      const res = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 import random
 from datetime import datetime, timedelta
+import os
 
 from .database import engine, get_db
 from . import models, schemas, crud
@@ -198,3 +200,11 @@ def get_defect_distribution(product_id: Optional[int] = None, db: Session = Depe
 @app.get("/api/dashboard/vendor-ratings", response_model=List[schemas.VendorRating])
 def get_vendor_ratings(db: Session = Depends(get_db)):
     return crud.get_vendor_ratings(db)
+
+
+# Mount static files for React frontend at root
+frontend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
+if os.path.exists(frontend_dir):
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+else:
+    print(f"Warning: Frontend build directory not found at {frontend_dir}. Run 'npm run build' inside frontend directory first.")
