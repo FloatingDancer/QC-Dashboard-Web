@@ -7,16 +7,17 @@ import random
 from datetime import datetime, timedelta
 import os
 
-from .database import engine, get_db
+from .database import engine, get_db, get_main_db, guest_engine
 from . import models, schemas, crud
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
+models.Base.metadata.create_all(bind=guest_engine)
 
 app = FastAPI(title="QC Dashboard API", version="1.0.0")
 
 # Auth dependencies
-def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.User:
+def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_main_db)) -> models.User:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -199,19 +200,29 @@ def seed_users(db: Session):
 # Seed database on startup
 @app.on_event("startup")
 def startup_event():
-    db = next(get_db())
+    # 1. Seed main DB
+    db = next(get_main_db())
     try:
         seed_users(db)
         seed_dummy_data(db)
     finally:
         db.close()
 
+    # 2. Seed guest DB
+    from .database import GuestSessionLocal
+    db_guest = GuestSessionLocal()
+    try:
+        seed_users(db_guest)
+        seed_dummy_data(db_guest)
+    finally:
+        db_guest.close()
+
 
 # Root endpoint removed to allow React static files to serve at /
 
 # Authentication endpoints
 @app.post("/api/auth/login", response_model=schemas.SessionOut)
-def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+def login(credentials: schemas.UserLogin, db: Session = Depends(get_main_db)):
     user = crud.authenticate_user(db, credentials.username, credentials.password)
     if not user:
         raise HTTPException(
@@ -222,7 +233,7 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     return {"token": session.token, "user": user}
 
 @app.post("/api/auth/logout")
-def logout(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+def logout(authorization: Optional[str] = Header(None), db: Session = Depends(get_main_db)):
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
         crud.delete_session(db, token)
