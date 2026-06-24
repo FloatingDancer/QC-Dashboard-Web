@@ -2,6 +2,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
+import hashlib
+import binascii
+import secrets
 from . import models, schemas
 
 # Product CRUD
@@ -232,3 +235,65 @@ def get_vendor_ratings(db: Session) -> List[Dict[str, Any]]:
         
     ratings.sort(key=lambda x: x["yield_rate"], reverse=True)
     return ratings
+
+
+# User & Session Authentication CRUD
+def hash_password(password: str) -> str:
+    salt = b"qshield_secure_salt_123"
+    key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
+    return binascii.hexlify(key).decode('utf-8')
+
+def get_user_by_username(db: Session, username: str):
+    return db.query(models.User).filter(models.User.username == username).first()
+
+def create_user(db: Session, user: schemas.UserCreate):
+    db_user = models.User(
+        username=user.username,
+        hashed_password=hash_password(user.password),
+        full_name=user.full_name,
+        role=user.role
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def authenticate_user(db: Session, username: str, password: str):
+    db_user = get_user_by_username(db, username)
+    if not db_user:
+        return None
+    hashed_pwd = hash_password(password)
+    if db_user.hashed_password == hashed_pwd:
+        return db_user
+    return None
+
+def create_session(db: Session, user_id: int):
+    token = secrets.token_hex(32)
+    # Session expires in 24 hours
+    expires_at = datetime.utcnow() + timedelta(hours=24)
+    db_session = models.UserSession(
+        token=token,
+        user_id=user_id,
+        expires_at=expires_at
+    )
+    db.add(db_session)
+    db.commit()
+    db.refresh(db_session)
+    return db_session
+
+def verify_session(db: Session, token: str):
+    db_session = db.query(models.UserSession).filter(
+        models.UserSession.token == token,
+        models.UserSession.expires_at > datetime.utcnow()
+    ).first()
+    if db_session:
+        return db_session.user
+    return None
+
+def delete_session(db: Session, token: str):
+    db_session = db.query(models.UserSession).filter(models.UserSession.token == token).first()
+    if db_session:
+        db.delete(db_session)
+        db.commit()
+        return True
+    return False

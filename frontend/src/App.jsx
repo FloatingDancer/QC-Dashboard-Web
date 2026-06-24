@@ -111,7 +111,16 @@ const translations = {
     defect_tilted_spring: "Tilted Spring (Pegas Miring)",
     defect_contamination: "Contamination (Kontaminasi)",
     defect_scrap: "Scrap (Sisa Bahan)",
-    defect_burry: "Burry (Berduri/Kasar)"
+    defect_burry: "Burry (Berduri/Kasar)",
+    login_subtitle: "Silakan masuk untuk mencatat atau memantau kualitas produk.",
+    login_username: "Username",
+    login_password: "Password",
+    login_button: "Masuk",
+    login_error: "Username atau password salah!",
+    login_error_empty: "Username dan password wajib diisi.",
+    logout_button: "Logout",
+    role_inspector: "QC Inspektur",
+    role_manager: "QC Supervisor"
   },
   en: {
     app_subtitle: "Automated QC Statistical Dashboard",
@@ -217,7 +226,16 @@ const translations = {
     defect_tilted_spring: "Tilted Spring",
     defect_contamination: "Contamination",
     defect_scrap: "Scrap",
-    defect_burry: "Burry"
+    defect_burry: "Burry",
+    login_subtitle: "Please sign in to record or monitor product quality.",
+    login_username: "Username",
+    login_password: "Password",
+    login_button: "Sign In",
+    login_error: "Incorrect username or password!",
+    login_error_empty: "Username and password are required.",
+    logout_button: "Logout",
+    role_inspector: "QC Inspector",
+    role_manager: "QC Manager"
   }
 };
 
@@ -225,6 +243,15 @@ export default function App() {
   const [lang, setLang] = useState(() => localStorage.getItem('qc_lang') || 'id');
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
+  const [token, setToken] = useState(() => localStorage.getItem('qc_token') || '');
+  const [user, setUser] = useState(null);
+  const [loadingUser, setLoadingUser] = useState(!!localStorage.getItem('qc_token'));
+
+  // Login form state
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
   
   const t = (key, placeholders = {}) => {
     let text = translations[lang][key] || translations['en'][key] || key;
@@ -287,15 +314,17 @@ export default function App() {
 
   // Initial products fetch
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    if (user) {
+      fetchProducts();
+    }
+  }, [user]);
 
   // Fetch dashboard data when tab is 'dashboard' or selected product changes
   useEffect(() => {
-    if (currentTab === 'dashboard') {
+    if (user && currentTab === 'dashboard') {
       fetchDashboardData();
     }
-  }, [currentTab]);
+  }, [currentTab, user]);
 
   useEffect(() => {
     if (selectedProductId && currentTab === 'dashboard') {
@@ -306,7 +335,7 @@ export default function App() {
   const fetchProducts = async () => {
     try {
       setLoadingProducts(true);
-      const res = await fetch('/api/products');
+      const res = await apiFetch('/api/products');
       if (res.ok) {
         const data = await res.json();
         setProducts(data);
@@ -325,28 +354,28 @@ export default function App() {
     setLoadingDashboard(true);
     try {
       // 1. Fetch summary
-      const summaryRes = await fetch('/api/dashboard/summary');
+      const summaryRes = await apiFetch('/api/dashboard/summary');
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         setSummary(summaryData);
       }
 
       // 2. Fetch Pareto data (filtered dynamically if product selected, otherwise overall)
-      const defectRes = await fetch(`/api/dashboard/defect-distribution${selectedProductId ? `?product_id=${selectedProductId}` : ''}`);
+      const defectRes = await apiFetch(`/api/dashboard/defect-distribution${selectedProductId ? `?product_id=${selectedProductId}` : ''}`);
       if (defectRes.ok) {
         const defectData = await defectRes.json();
         setDefectDistData(defectData);
       }
 
       // 3. Fetch vendor ratings
-      const vendorRes = await fetch('/api/dashboard/vendor-ratings');
+      const vendorRes = await apiFetch('/api/dashboard/vendor-ratings');
       if (vendorRes.ok) {
         const vendorData = await vendorRes.json();
         setVendorRatings(vendorData);
       }
 
       // 4. Fetch history log
-      const historyRes = await fetch('/api/qc/history');
+      const historyRes = await apiFetch('/api/qc/history');
       if (historyRes.ok) {
         const historyData = await historyRes.json();
         setHistory(historyData);
@@ -367,14 +396,14 @@ export default function App() {
     setLoadingChart(true);
     try {
       // Fetch Control Chart data
-      const res = await fetch(`/api/dashboard/control-chart?product_id=${productId}`);
+      const res = await apiFetch(`/api/dashboard/control-chart?product_id=${productId}`);
       if (res.ok) {
         const chartData = await res.json();
         setControlChartData(chartData);
       }
       
       // Fetch Dynamic defect Pareto for this product
-      const defectRes = await fetch(`/api/dashboard/defect-distribution?product_id=${productId}`);
+      const defectRes = await apiFetch(`/api/dashboard/defect-distribution?product_id=${productId}`);
       if (defectRes.ok) {
         const defectData = await defectRes.json();
         setDefectDistData(defectData);
@@ -414,7 +443,7 @@ export default function App() {
     };
     
     try {
-      const res = await fetch(`/api/products/${editingProductId}`, {
+      const res = await apiFetch(`/api/products/${editingProductId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -447,7 +476,7 @@ export default function App() {
     };
     
     try {
-      const res = await fetch('/api/products', {
+      const res = await apiFetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -473,6 +502,91 @@ export default function App() {
     setEditName(prod.product_name);
     setEditUcl(prod.ucl_limit.toString());
     setEditLcl(prod.lcl_limit.toString());
+  };
+
+  const apiFetch = async (endpoint, options = {}) => {
+    const headers = {
+      ...options.headers,
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(endpoint, {
+      ...options,
+      headers,
+    });
+  };
+
+  useEffect(() => {
+    if (token) {
+      verifyToken();
+    } else {
+      setLoadingUser(false);
+    }
+  }, [token]);
+
+  const verifyToken = async () => {
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const userData = await res.json();
+        setUser(userData);
+      } else {
+        handleLogout();
+      }
+    } catch (err) {
+      console.error("Error verifying token:", err);
+    } finally {
+      setLoadingUser(false);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    if (!loginUsername || !loginPassword) {
+      setLoginError(t('login_error_empty'));
+      return;
+    }
+    setLoginLoading(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUsername.trim().toLowerCase(), password: loginPassword })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('qc_token', data.token);
+        setToken(data.token);
+        setUser(data.user);
+        setCurrentTab('dashboard');
+      } else {
+        setLoginError(t('login_error'));
+      }
+    } catch (err) {
+      setLoginError(t('login_error'));
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    } catch (err) {
+      // Ignore network errors on logout
+    }
+    localStorage.removeItem('qc_token');
+    setToken('');
+    setUser(null);
+    setLoginUsername('');
+    setLoginPassword('');
   };
 
   const exportToExcel = () => {
@@ -508,6 +622,118 @@ export default function App() {
   const printDashboard = () => {
     window.print();
   };
+
+  if (loadingUser) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#090d16' }}>
+        <div className="alert-pulse" style={{ color: 'var(--color-brand)', fontWeight: 600 }}>Loading Q-Shield Pro...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: 'radial-gradient(circle at 50% 50%, #0F172A 0%, #020617 100%)',
+        padding: '20px',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        {/* Neon decorative blobs */}
+        <div style={{
+          position: 'absolute',
+          width: '300px',
+          height: '300px',
+          background: 'rgba(2, 132, 199, 0.15)',
+          borderRadius: '50%',
+          filter: 'blur(100px)',
+          top: '20%',
+          left: '20%',
+          pointerEvents: 'none'
+        }} />
+        <div style={{
+          position: 'absolute',
+          width: '300px',
+          height: '300px',
+          background: 'rgba(239, 68, 68, 0.1)',
+          borderRadius: '50%',
+          filter: 'blur(100px)',
+          bottom: '20%',
+          right: '20%',
+          pointerEvents: 'none'
+        }} />
+
+        <div className="glass-card" style={{ maxWidth: '400px', width: '100%', padding: '40px', textAlign: 'center', position: 'relative', zIndex: 10 }}>
+          <div style={{
+            background: 'linear-gradient(135deg, var(--color-brand), #0284C7)',
+            padding: '16px',
+            borderRadius: '50%',
+            color: '#000',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '24px'
+          }}>
+            <Award size={36} />
+          </div>
+
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '8px', color: 'var(--text-primary)' }}>Q-Shield Pro</h2>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '32px' }}>
+            {t("login_subtitle")}
+          </p>
+
+          {loginError && (
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: 'var(--color-danger)',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              marginBottom: '20px',
+              fontSize: '0.8rem',
+              textAlign: 'left'
+            }}>
+              {loginError}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} style={{ textAlign: 'left' }}>
+            <div className="form-group">
+              <label className="form-label">{t("login_username")}</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="Username" 
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div className="form-group" style={{ marginBottom: '32px' }}>
+              <label className="form-label">{t("login_password")}</label>
+              <input 
+                type="password" 
+                className="form-input" 
+                placeholder="Password" 
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px' }} disabled={loginLoading}>
+              {loginLoading ? '...' : t("login_button")}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -585,14 +811,16 @@ export default function App() {
             <PlusCircle size={16} />
             {t("tab_input")}
           </button>
-          <button 
-            className={`btn ${currentTab === 'config' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-            onClick={() => setCurrentTab('config')}
-          >
-            <Settings size={16} />
-            {t("tab_config")}
-          </button>
+          {user && user.role === 'manager' && (
+            <button 
+              className={`btn ${currentTab === 'config' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+              onClick={() => setCurrentTab('config')}
+            >
+              <Settings size={16} />
+              {t("tab_config")}
+            </button>
+          )}
 
           <select 
             className="form-select" 
@@ -613,6 +841,24 @@ export default function App() {
             <option value="id" style={{ background: '#111827' }}>ID</option>
             <option value="en" style={{ background: '#111827' }}>EN</option>
           </select>
+
+          {user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '16px', paddingLeft: '16px', borderLeft: '1px solid var(--border-color)' }}>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{user.full_name}</p>
+                <p style={{ fontSize: '0.7rem', color: 'var(--color-brand)', fontWeight: 500 }}>
+                  {user.role === 'manager' ? t('role_manager') : t('role_inspector')}
+                </p>
+              </div>
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '6px 12px', fontSize: '0.75rem', borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }} 
+                onClick={handleLogout}
+              >
+                {t('logout_button')}
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -839,6 +1085,7 @@ export default function App() {
               }, 1200);
             }} 
             t={t}
+            user={user}
           />
         )}
 

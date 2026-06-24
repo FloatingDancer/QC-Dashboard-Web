@@ -102,3 +102,30 @@ class VendorRating(BaseModel):
     total_passed: int
     total_failed: int
     yield_rate: float
+
+
+# User Schemas
+class UserBase(BaseModel):
+    username: str
+    full_name: str
+    role: str
+
+class UserCreate(UserBase):
+    password: str
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class UserOut(UserBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+class SessionOut(BaseModel):
+    token: str
+    user: UserOut
+
+    class Config:
+        from_attributes = True

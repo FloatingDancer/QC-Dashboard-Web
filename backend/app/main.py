@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -14,6 +14,32 @@ from . import models, schemas, crud
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="QC Dashboard API", version="1.0.0")
+
+# Auth dependencies
+def get_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> models.User:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token autentikasi tidak ditemukan atau format salah.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization.split(" ")[1]
+    user = crud.verify_session(db, token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session tidak valid atau telah kedaluwarsa.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+def require_manager(current_user: models.User = Depends(get_current_user)) -> models.User:
+    if current_user.role != "manager":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Akses ditolak. Peran Manager diperlukan untuk tindakan ini."
+        )
+    return current_user
 
 # Enable CORS for frontend connection
 app.add_middleware(
@@ -128,11 +154,37 @@ def seed_dummy_data(db: Session):
                     db.commit()
     print("Database seeding completed successfully.")
 
+def seed_users(db: Session):
+    user_count = db.query(models.User).count()
+    if user_count > 0:
+        return
+    
+    print("Seeding default QC users...")
+    # Seed manager account
+    crud.create_user(db, schemas.UserCreate(
+        username="admin",
+        password="admin123",
+        full_name="QC Supervisor",
+        role="manager"
+    ))
+    
+    # Seed inspectors
+    inspectors = ["Firgi", "Alan", "Eka", "Munir", "Tarjani", "Amar"]
+    for insp in inspectors:
+        crud.create_user(db, schemas.UserCreate(
+            username=insp.lower(),
+            password=f"{insp.lower()}123",
+            full_name=insp,
+            role="inspector"
+        ))
+    print("QC Users seeding completed.")
+
 # Seed database on startup
 @app.on_event("startup")
 def startup_event():
     db = next(get_db())
     try:
+        seed_users(db)
         seed_dummy_data(db)
     finally:
         db.close()
@@ -140,20 +192,53 @@ def startup_event():
 
 # Root endpoint removed to allow React static files to serve at /
 
+# Authentication endpoints
+@app.post("/api/auth/login", response_model=schemas.SessionOut)
+def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+    user = crud.authenticate_user(db, credentials.username, credentials.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Username atau password salah."
+        )
+    session = crud.create_session(db, user.id)
+    return {"token": session.token, "user": user}
+
+@app.post("/api/auth/logout")
+def logout(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        crud.delete_session(db, token)
+    return {"message": "Logout berhasil."}
+
+@app.get("/api/auth/me", response_model=schemas.UserOut)
+def get_me(current_user: models.User = Depends(get_current_user)):
+    return current_user
+
+
 # Products endpoints
 @app.get("/api/products", response_model=List[schemas.Product])
 def get_products(db: Session = Depends(get_db)):
     return crud.get_products(db)
 
 @app.post("/api/products", response_model=schemas.Product)
-def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
+def create_product(
+    product: schemas.ProductCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_manager)
+):
     db_product = crud.get_product_by_code(db, product.product_code)
     if db_product:
         raise HTTPException(status_code=400, detail="Product code already registered")
     return crud.create_product(db, product)
 
 @app.put("/api/products/{product_id}", response_model=schemas.Product)
-def update_product(product_id: int, product: schemas.ProductUpdate, db: Session = Depends(get_db)):
+def update_product(
+    product_id: int, 
+    product: schemas.ProductUpdate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_manager)
+):
     db_product = crud.get_product(db, product_id)
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -161,7 +246,14 @@ def update_product(product_id: int, product: schemas.ProductUpdate, db: Session 
 
 # Inspection endpoints
 @app.post("/api/qc/submit", response_model=schemas.QCInspection)
-def submit_qc_inspection(inspection: schemas.QCInspectionCreate, db: Session = Depends(get_db)):
+def submit_qc_inspection(
+    inspection: schemas.QCInspectionCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # Auto-assign inspector name from the authenticated user
+    inspection.inspector_name = current_user.full_name
+    
     product = crud.get_product(db, inspection.product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")

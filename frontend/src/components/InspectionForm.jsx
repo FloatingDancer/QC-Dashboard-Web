@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 
-export default function InspectionForm({ products, onSubmitSuccess, t }) {
+export default function InspectionForm({ products, onSubmitSuccess, t, user }) {
   const getDefectName = (type) => {
     const key = `defect_${type.toLowerCase().replace(/\s+/g, '_')}`;
     return t(key) !== key ? t(key) : type;
@@ -13,8 +13,15 @@ export default function InspectionForm({ products, onSubmitSuccess, t }) {
   });
   const [totalInspected, setTotalInspected] = useState('');
   const [totalPassed, setTotalPassed] = useState('');
-  const [inspectorName, setInspectorName] = useState('');
+  const [inspectorName, setInspectorName] = useState(() => user ? user.full_name : '');
   const [vendorName, setVendorName] = useState('PT. Samjin');
+
+  // Keep inspector name in sync when user logs in/changes
+  useEffect(() => {
+    if (user) {
+      setInspectorName(user.full_name);
+    }
+  }, [user]);
   
   // State for defect breakdown
   const [defects, setDefects] = useState({});
@@ -118,9 +125,14 @@ export default function InspectionForm({ products, onSubmitSuccess, t }) {
     };
 
     try {
+      const token = localStorage.getItem('qc_token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const response = await fetch('/api/qc/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload)
       });
 
@@ -242,9 +254,11 @@ export default function InspectionForm({ products, onSubmitSuccess, t }) {
             <input 
               type="text" 
               className="form-input" 
-              placeholder={lang === 'id' ? 'Nama pemeriksa' : 'Inspector name'}
+              placeholder={t("form_label_inspector")}
               value={inspectorName}
               onChange={(e) => setInspectorName(e.target.value)}
+              readOnly={!!user}
+              style={user ? { background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', cursor: 'not-allowed' } : {}}
               required
             />
           </div>
