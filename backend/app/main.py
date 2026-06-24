@@ -157,6 +157,15 @@ def seed_dummy_data(db: Session):
 def seed_users(db: Session):
     user_count = db.query(models.User).count()
     if user_count > 0:
+        guest_exists = db.query(models.User).filter(models.User.username == "guest").first()
+        if not guest_exists:
+            print("Seeding missing guest user...")
+            crud.create_user(db, schemas.UserCreate(
+                username="guest",
+                password="guest123",
+                full_name="Guest Tester",
+                role="inspector"
+            ))
         return
     
     print("Seeding default QC users...")
@@ -177,6 +186,14 @@ def seed_users(db: Session):
             full_name=insp,
             role="inspector"
         ))
+        
+    # Seed guest tester
+    crud.create_user(db, schemas.UserCreate(
+        username="guest",
+        password="guest123",
+        full_name="Guest Tester",
+        role="inspector"
+    ))
     print("QC Users seeding completed.")
 
 # Seed database on startup

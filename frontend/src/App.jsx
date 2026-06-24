@@ -116,6 +116,7 @@ const translations = {
     login_username: "Username",
     login_password: "Password",
     login_button: "Masuk",
+    login_guest_button: "Masuk sebagai Guest (Tamu)",
     login_error: "Username atau password salah!",
     login_error_empty: "Username dan password wajib diisi.",
     logout_button: "Logout",
@@ -231,6 +232,7 @@ const translations = {
     login_username: "Username",
     login_password: "Password",
     login_button: "Sign In",
+    login_guest_button: "Login as Guest",
     login_error: "Incorrect username or password!",
     login_error_empty: "Username and password are required.",
     logout_button: "Logout",
@@ -573,6 +575,31 @@ export default function App() {
     }
   };
 
+  const handleGuestLogin = async () => {
+    setLoginError('');
+    setLoginLoading(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'guest', password: 'guest123' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('qc_token', data.token);
+        setToken(data.token);
+        setUser(data.user);
+        setCurrentTab('dashboard');
+      } else {
+        setLoginError(t('login_error'));
+      }
+    } catch (err) {
+      setLoginError(t('login_error'));
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', {
@@ -728,6 +755,16 @@ export default function App() {
 
             <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '12px' }} disabled={loginLoading}>
               {loginLoading ? '...' : t("login_button")}
+            </button>
+
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              style={{ width: '100%', padding: '12px', marginTop: '12px', borderStyle: 'dashed', borderColor: 'var(--color-brand)' }} 
+              onClick={handleGuestLogin}
+              disabled={loginLoading}
+            >
+              {loginLoading ? '...' : t("login_guest_button")}
             </button>
           </form>
         </div>
