@@ -138,9 +138,7 @@ def startup_event():
         db.close()
 
 
-@app.get("/")
-def read_root():
-    return {"message": "QC Dashboard API is running. Go to /docs for Swagger API documentation."}
+# Root endpoint removed to allow React static files to serve at /
 
 # Products endpoints
 @app.get("/api/products", response_model=List[schemas.Product])
