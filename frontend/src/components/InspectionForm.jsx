@@ -14,12 +14,13 @@ export default function InspectionForm({ products, onSubmitSuccess, t, user }) {
   const [totalInspected, setTotalInspected] = useState('');
   const [totalPassed, setTotalPassed] = useState('');
   const [inspectorName, setInspectorName] = useState(() => user ? user.full_name : '');
-  const [vendorName, setVendorName] = useState('PT. Samjin');
+  const [vendorName, setVendorName] = useState(() => user && user.username === 'guest' ? 'PT. Vendor Simulasi' : 'PT. Samjin');
 
-  // Keep inspector name in sync when user logs in/changes
+  // Keep inspector name and vendor name in sync when user logs in/changes
   useEffect(() => {
     if (user) {
       setInspectorName(user.full_name);
+      setVendorName(user.username === 'guest' ? 'PT. Vendor Simulasi' : 'PT. Samjin');
     }
   }, [user]);
   
@@ -146,7 +147,7 @@ export default function InspectionForm({ products, onSubmitSuccess, t, user }) {
       // Reset Form fields
       setTotalInspected('');
       setTotalPassed('');
-      setVendorName('PT. Samjin');
+      setVendorName(user && user.username === 'guest' ? 'PT. Vendor Simulasi' : 'PT. Samjin');
       setInspectionDate(() => {
         const tzoffset = (new Date()).getTimezoneOffset() * 60000;
         return (new Date(Date.now() - tzoffset)).toISOString().slice(0, 10);
@@ -234,7 +235,11 @@ export default function InspectionForm({ products, onSubmitSuccess, t, user }) {
             onChange={(e) => setVendorName(e.target.value)}
             required
           >
-            <option value="PT. Samjin">PT. Samjin</option>
+            {user && user.username === 'guest' ? (
+              <option value="PT. Vendor Simulasi">PT. Vendor Simulasi</option>
+            ) : (
+              <option value="PT. Samjin">PT. Samjin</option>
+            )}
           </select>
         </div>
 

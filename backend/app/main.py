@@ -52,12 +52,12 @@ app.add_middleware(
 )
 
 # Helper function to seed dummy data if database is empty
-def seed_dummy_data(db: Session):
+def seed_dummy_data(db: Session, is_guest: bool = False):
     product_count = db.query(models.Product).count()
     if product_count > 0:
         return # Database already has data
 
-    print("Seeding database with dummy QC data...")
+    print(f"Seeding database with {'guest ' if is_guest else ''}dummy QC data...")
     
     # 1. Create Products
     products_data = [
@@ -79,7 +79,7 @@ def seed_dummy_data(db: Session):
         db.refresh(p)
         
     # 2. Create historical inspections (last 15 days)
-    inspectors = ["Firgi", "Alan", "Eka", "Munir", "Tarjani", "Amar"]
+    inspectors = ["Inspector A", "Inspector B", "Inspector C", "Inspector D"] if is_guest else ["Firgi", "Alan", "Eka", "Munir", "Tarjani", "Amar"]
     defect_types = {
         "BS-037A-1": ["tilted spring", "Contamination", "Scrap", "Burry"],
         "BT-120A": ["tilted spring", "Contamination", "Scrap", "Burry"],
@@ -123,7 +123,7 @@ def seed_dummy_data(db: Session):
                     total_passed=total_passed,
                     total_failed=total_failed,
                     inspector_name=random.choice(inspectors),
-                    vendor_name="PT. Samjin"
+                    vendor_name="PT. Vendor Simulasi" if is_guest else "PT. Samjin"
                 )
                 db.add(insp)
                 db.commit()
@@ -155,7 +155,7 @@ def seed_dummy_data(db: Session):
                     db.commit()
     print("Database seeding completed successfully.")
 
-def seed_users(db: Session):
+def seed_users(db: Session, is_guest: bool = False):
     user_count = db.query(models.User).count()
     if user_count > 0:
         guest_exists = db.query(models.User).filter(models.User.username == "guest").first()
@@ -169,32 +169,40 @@ def seed_users(db: Session):
             ))
         return
     
-    print("Seeding default QC users...")
-    # Seed manager account
-    crud.create_user(db, schemas.UserCreate(
-        username="admin",
-        password="admin123",
-        full_name="QC Supervisor",
-        role="manager"
-    ))
-    
-    # Seed inspectors
-    inspectors = ["Firgi", "Alan", "Eka", "Munir", "Tarjani", "Amar"]
-    for insp in inspectors:
+    print(f"Seeding {'guest' if is_guest else 'default'} QC users...")
+    if is_guest:
         crud.create_user(db, schemas.UserCreate(
-            username=insp.lower(),
-            password=f"{insp.lower()}123",
-            full_name=insp,
+            username="guest",
+            password="guest123",
+            full_name="Guest Tester",
             role="inspector"
         ))
+    else:
+        # Seed manager account
+        crud.create_user(db, schemas.UserCreate(
+            username="admin",
+            password="admin123",
+            full_name="QC Supervisor",
+            role="manager"
+        ))
         
-    # Seed guest tester
-    crud.create_user(db, schemas.UserCreate(
-        username="guest",
-        password="guest123",
-        full_name="Guest Tester",
-        role="inspector"
-    ))
+        # Seed inspectors
+        inspectors = ["Firgi", "Alan", "Eka", "Munir", "Tarjani", "Amar"]
+        for insp in inspectors:
+            crud.create_user(db, schemas.UserCreate(
+                username=insp.lower(),
+                password=f"{insp.lower()}123",
+                full_name=insp,
+                role="inspector"
+            ))
+            
+        # Seed guest tester
+        crud.create_user(db, schemas.UserCreate(
+            username="guest",
+            password="guest123",
+            full_name="Guest Tester",
+            role="inspector"
+        ))
     print("QC Users seeding completed.")
 
 # Seed database on startup
@@ -212,8 +220,8 @@ def startup_event():
     from .database import GuestSessionLocal
     db_guest = GuestSessionLocal()
     try:
-        seed_users(db_guest)
-        seed_dummy_data(db_guest)
+        seed_users(db_guest, is_guest=True)
+        seed_dummy_data(db_guest, is_guest=True)
     finally:
         db_guest.close()
 
