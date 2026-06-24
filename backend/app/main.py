@@ -251,6 +251,50 @@ def logout(authorization: Optional[str] = Header(None), db: Session = Depends(ge
 def get_me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
+@app.put("/api/auth/profile", response_model=schemas.UserOut)
+def update_profile(
+    profile_data: schemas.ProfileUpdate,
+    db: Session = Depends(get_main_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.username == "guest":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Guest user tidak diperbolehkan mengubah pengaturan profil."
+        )
+        
+    user = current_user
+    
+    # 1. Update Full Name if provided
+    if profile_data.full_name is not None:
+        full_name = profile_data.full_name.strip()
+        if not full_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Nama lengkap tidak boleh kosong."
+            )
+        user = crud.update_user_profile(db, current_user.id, full_name)
+        
+    # 2. Update Password if provided
+    if profile_data.new_password is not None or profile_data.current_password is not None:
+        if not profile_data.new_password or not profile_data.current_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Untuk mengubah password, isi password sekarang dan password baru."
+            )
+            
+        # Verify current password
+        verified = crud.authenticate_user(db, current_user.username, profile_data.current_password)
+        if not verified:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password sekarang salah."
+            )
+            
+        user = crud.update_user_password(db, current_user.id, profile_data.new_password)
+        
+    return user
+
 
 # Products endpoints
 @app.get("/api/products", response_model=List[schemas.Product])

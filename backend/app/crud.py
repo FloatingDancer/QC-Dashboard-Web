@@ -297,3 +297,19 @@ def delete_session(db: Session, token: str):
         db.commit()
         return True
     return False
+
+def update_user_profile(db: Session, user_id: int, full_name: str):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if db_user:
+        db_user.full_name = full_name
+        db.commit()
+        db.refresh(db_user)
+    return db_user
+
+def update_user_password(db: Session, user_id: int, new_password: str):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if db_user:
+        db_user.hashed_password = hash_password(new_password)
+        db.commit()
+        db.refresh(db_user)
+    return db_user

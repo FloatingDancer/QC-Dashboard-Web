@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, PlusCircle, History, ShieldAlert, Award, FileSpreadsheet, Settings, Download, Printer } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, History, ShieldAlert, Award, FileSpreadsheet, Settings, Download, Printer, User, CheckCircle2 } from 'lucide-react';
 import KPIStats from './components/KPIStats';
 import ControlChart from './components/ControlChart';
 import ParetoChart from './components/ParetoChart';
@@ -121,7 +121,22 @@ const translations = {
     login_error_empty: "Username dan password wajib diisi.",
     logout_button: "Logout",
     role_inspector: "QC Inspektur",
-    role_manager: "QC Supervisor"
+    role_manager: "QC Supervisor",
+    tab_profile: "Profil",
+    profile_title: "Pengaturan Profil",
+    profile_subtitle: "Perbarui informasi nama lengkap dan ubah kata sandi akun Anda.",
+    profile_username: "Username",
+    profile_full_name: "Nama Lengkap",
+    profile_role: "Peran",
+    profile_save_name: "Perbarui Nama",
+    profile_curr_pwd: "Password Sekarang",
+    profile_new_pwd: "Password Baru",
+    profile_conf_pwd: "Konfirmasi Password Baru",
+    profile_save_pwd: "Ganti Password",
+    profile_success_name: "Nama lengkap berhasil diperbarui!",
+    profile_success_pwd: "Password berhasil diganti!",
+    profile_error_mismatch: "Konfirmasi password baru tidak cocok!",
+    profile_error_empty: "Kolom password wajib diisi."
   },
   en: {
     app_subtitle: "Automated QC Statistical Dashboard",
@@ -237,7 +252,22 @@ const translations = {
     login_error_empty: "Username and password are required.",
     logout_button: "Logout",
     role_inspector: "QC Inspector",
-    role_manager: "QC Manager"
+    role_manager: "QC Manager",
+    tab_profile: "Profile",
+    profile_title: "Profile Settings",
+    profile_subtitle: "Update your full name and change your account password.",
+    profile_username: "Username",
+    profile_full_name: "Full Name",
+    profile_role: "Role",
+    profile_save_name: "Update Name",
+    profile_curr_pwd: "Current Password",
+    profile_new_pwd: "New Password",
+    profile_conf_pwd: "Confirm New Password",
+    profile_save_pwd: "Change Password",
+    profile_success_name: "Full name updated successfully!",
+    profile_success_pwd: "Password changed successfully!",
+    profile_error_mismatch: "Confirm new password does not match!",
+    profile_error_empty: "Password fields are required."
   }
 };
 
@@ -254,6 +284,15 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  
+  // Profile form state
+  const [profileFullName, setProfileFullName] = useState('');
+  const [profileCurrPwd, setProfileCurrPwd] = useState('');
+  const [profileNewPwd, setProfileNewPwd] = useState('');
+  const [profileConfPwd, setProfileConfPwd] = useState('');
+  const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+  const [profileErrorMsg, setProfileErrorMsg] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
   
   const t = (key, placeholders = {}) => {
     let text = translations[lang][key] || translations['en'][key] || key;
@@ -527,6 +566,12 @@ export default function App() {
     }
   }, [token]);
 
+  useEffect(() => {
+    if (user) {
+      setProfileFullName(user.full_name);
+    }
+  }, [user]);
+
   const verifyToken = async () => {
     try {
       const res = await fetch('/api/auth/me', {
@@ -597,6 +642,71 @@ export default function App() {
       setLoginError(t('login_error'));
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const handleUpdateName = async (e) => {
+    e.preventDefault();
+    setProfileSuccessMsg('');
+    setProfileErrorMsg('');
+    if (!profileFullName.trim()) return;
+    setProfileLoading(true);
+    try {
+      const res = await apiFetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name: profileFullName.trim() })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+        setProfileSuccessMsg(t('profile_success_name'));
+      } else {
+        const err = await res.json();
+        setProfileErrorMsg(err.detail || 'Failed to update name.');
+      }
+    } catch (err) {
+      setProfileErrorMsg('Network error.');
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setProfileSuccessMsg('');
+    setProfileErrorMsg('');
+    if (!profileCurrPwd || !profileNewPwd || !profileConfPwd) {
+      setProfileErrorMsg(t('profile_error_empty'));
+      return;
+    }
+    if (profileNewPwd !== profileConfPwd) {
+      setProfileErrorMsg(t('profile_error_mismatch'));
+      return;
+    }
+    setProfileLoading(true);
+    try {
+      const res = await apiFetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_password: profileCurrPwd,
+          new_password: profileNewPwd
+        })
+      });
+      if (res.ok) {
+        setProfileSuccessMsg(t('profile_success_pwd'));
+        setProfileCurrPwd('');
+        setProfileNewPwd('');
+        setProfileConfPwd('');
+      } else {
+        const err = await res.json();
+        setProfileErrorMsg(err.detail || 'Failed to change password.');
+      }
+    } catch (err) {
+      setProfileErrorMsg('Network error.');
+    } finally {
+      setProfileLoading(false);
     }
   };
 
@@ -856,6 +966,17 @@ export default function App() {
             >
               <Settings size={16} />
               {t("tab_config")}
+            </button>
+          )}
+
+          {user && user.username !== 'guest' && (
+            <button 
+              className={`btn ${currentTab === 'profile' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+              onClick={() => setCurrentTab('profile')}
+            >
+              <User size={16} />
+              {t("tab_profile")}
             </button>
           )}
 
@@ -1305,6 +1426,139 @@ export default function App() {
                 </form>
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {currentTab === 'profile' && (
+          <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '8px' }}>{t("profile_title")}</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '24px' }}>
+              {t("profile_subtitle")}
+            </p>
+
+            {profileErrorMsg && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                background: 'var(--color-danger-glow)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: 'var(--color-danger)',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-md)',
+                marginBottom: '20px',
+                fontSize: '0.875rem'
+              }}>
+                <ShieldAlert size={18} />
+                <span>{profileErrorMsg}</span>
+              </div>
+            )}
+
+            {profileSuccessMsg && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                background: 'var(--color-success-glow)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                color: 'var(--color-success)',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-md)',
+                marginBottom: '20px',
+                fontSize: '0.875rem'
+              }}>
+                <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} />
+                <span>{profileSuccessMsg}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Profile Details & Name Form */}
+              <div className="glass-card">
+                <form onSubmit={handleUpdateName}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                    <div className="form-group">
+                      <label className="form-label">{t("profile_username")}</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        value={user?.username || ''} 
+                        disabled 
+                        style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', cursor: 'not-allowed' }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{t("profile_role")}</label>
+                      <input 
+                        type="text" 
+                        className="form-input" 
+                        value={user?.role === 'manager' ? t('role_manager') : t('role_inspector')} 
+                        disabled 
+                        style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', cursor: 'not-allowed' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">{t("profile_full_name")}</label>
+                    <input 
+                      type="text" 
+                      className="form-input"
+                      value={profileFullName}
+                      onChange={(e) => setProfileFullName(e.target.value)}
+                      required
+                    />
+                  </div>
+                  
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={profileLoading}>
+                    {profileLoading ? '...' : t("profile_save_name")}
+                  </button>
+                </form>
+              </div>
+
+              {/* Password Form */}
+              <div className="glass-card">
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '16px' }}>{t("profile_change_pwd")}</h3>
+                <form onSubmit={handleUpdatePassword}>
+                  <div className="form-group">
+                    <label className="form-label">{t("profile_curr_pwd")}</label>
+                    <input 
+                      type="password" 
+                      className="form-input"
+                      value={profileCurrPwd}
+                      onChange={(e) => setProfileCurrPwd(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="form-group">
+                      <label className="form-label">{t("profile_new_pwd")}</label>
+                      <input 
+                        type="password" 
+                        className="form-input"
+                        value={profileNewPwd}
+                        onChange={(e) => setProfileNewPwd(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">{t("profile_conf_pwd")}</label>
+                      <input 
+                        type="password" 
+                        className="form-input"
+                        value={profileConfPwd}
+                        onChange={(e) => setProfileConfPwd(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }} disabled={profileLoading}>
+                    {profileLoading ? '...' : t("profile_save_pwd")}
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         )}
