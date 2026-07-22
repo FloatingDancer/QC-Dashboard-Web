@@ -1,6 +1,9 @@
 {
   "name": "qc-dashboard-monorepo",
   "private": true,
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
     "build": "npm run build --prefix frontend"
   }
