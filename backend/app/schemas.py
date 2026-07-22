@@ -131,6 +131,8 @@ class SessionOut(BaseModel):
         from_attributes = True
 
 class ProfileUpdate(BaseModel):
+    username: Optional[str] = None
     full_name: Optional[str] = None
+    role: Optional[str] = None
     current_password: Optional[str] = None
     new_password: Optional[str] = None

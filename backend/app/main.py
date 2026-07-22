@@ -265,7 +265,30 @@ def update_profile(
         
     user = current_user
     
-    # 1. Update Full Name if provided
+    # Validate and gather update fields
+    update_fields = {}
+    
+    # 1. Validate Username if provided
+    if profile_data.username is not None:
+        username = profile_data.username.strip().lower()
+        if not username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username tidak boleh kosong."
+            )
+        # Check if username is taken
+        existing_user = db.query(models.User).filter(
+            models.User.username == username,
+            models.User.id != current_user.id
+        ).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username sudah digunakan oleh akun lain."
+            )
+        update_fields["username"] = username
+        
+    # 2. Validate Full Name if provided
     if profile_data.full_name is not None:
         full_name = profile_data.full_name.strip()
         if not full_name:
@@ -273,7 +296,19 @@ def update_profile(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Nama lengkap tidak boleh kosong."
             )
-        user = crud.update_user_profile(db, current_user.id, full_name)
+        update_fields["full_name"] = full_name
+        
+    # 3. Validate Role if provided (Temporarily disabled role change)
+    if profile_data.role is not None:
+        role = profile_data.role.strip().lower()
+        if role != current_user.role:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Mengubah peran (role) secara mandiri tidak diperbolehkan."
+            )
+        
+    if update_fields:
+        user = crud.update_user_profile(db, current_user.id, **update_fields)
         
     # 2. Update Password if provided
     if profile_data.new_password is not None or profile_data.current_password is not None:

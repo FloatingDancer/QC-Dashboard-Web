@@ -298,10 +298,15 @@ def delete_session(db: Session, token: str):
         return True
     return False
 
-def update_user_profile(db: Session, user_id: int, full_name: str):
+def update_user_profile(db: Session, user_id: int, full_name: str = None, username: str = None, role: str = None):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if db_user:
-        db_user.full_name = full_name
+        if full_name is not None:
+            db_user.full_name = full_name
+        if username is not None:
+            db_user.username = username
+        if role is not None:
+            db_user.role = role
         db.commit()
         db.refresh(db_user)
     return db_user

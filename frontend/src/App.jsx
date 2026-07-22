@@ -124,11 +124,12 @@ const translations = {
     role_manager: "QC Supervisor",
     tab_profile: "Profil",
     profile_title: "Pengaturan Profil",
-    profile_subtitle: "Perbarui informasi nama lengkap dan ubah kata sandi akun Anda.",
+    profile_subtitle: "Perbarui informasi profil dan ubah kata sandi akun Anda.",
     profile_username: "Username",
     profile_full_name: "Nama Lengkap",
     profile_role: "Peran",
-    profile_save_name: "Perbarui Nama",
+    profile_save_name: "Perbarui Profil",
+    profile_change_pwd: "Ubah Password",
     profile_curr_pwd: "Password Sekarang",
     profile_new_pwd: "Password Baru",
     profile_conf_pwd: "Konfirmasi Password Baru",
@@ -255,11 +256,12 @@ const translations = {
     role_manager: "QC Manager",
     tab_profile: "Profile",
     profile_title: "Profile Settings",
-    profile_subtitle: "Update your full name and change your account password.",
+    profile_subtitle: "Update your profile details and change your account password.",
     profile_username: "Username",
     profile_full_name: "Full Name",
     profile_role: "Role",
-    profile_save_name: "Update Name",
+    profile_save_name: "Update Profile",
+    profile_change_pwd: "Change Password",
     profile_curr_pwd: "Current Password",
     profile_new_pwd: "New Password",
     profile_conf_pwd: "Confirm New Password",
@@ -286,6 +288,8 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   
   // Profile form state
+  const [profileUsername, setProfileUsername] = useState('');
+  const [profileRole, setProfileRole] = useState('');
   const [profileFullName, setProfileFullName] = useState('');
   const [profileCurrPwd, setProfileCurrPwd] = useState('');
   const [profileNewPwd, setProfileNewPwd] = useState('');
@@ -569,6 +573,8 @@ export default function App() {
   useEffect(() => {
     if (user) {
       setProfileFullName(user.full_name);
+      setProfileUsername(user.username);
+      setProfileRole(user.role);
     }
   }, [user]);
 
@@ -645,17 +651,24 @@ export default function App() {
     }
   };
 
-  const handleUpdateName = async (e) => {
+  const handleUpdateProfile = async (e) => {
     e.preventDefault();
     setProfileSuccessMsg('');
     setProfileErrorMsg('');
-    if (!profileFullName.trim()) return;
+    if (!profileUsername.trim() || !profileFullName.trim() || !profileRole) {
+      setProfileErrorMsg('Semua kolom profil wajib diisi.');
+      return;
+    }
     setProfileLoading(true);
     try {
       const res = await apiFetch('/api/auth/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ full_name: profileFullName.trim() })
+        body: JSON.stringify({
+          username: profileUsername.trim().toLowerCase(),
+          full_name: profileFullName.trim(),
+          role: profileRole
+        })
       });
       if (res.ok) {
         const data = await res.json();
@@ -663,7 +676,7 @@ export default function App() {
         setProfileSuccessMsg(t('profile_success_name'));
       } else {
         const err = await res.json();
-        setProfileErrorMsg(err.detail || 'Failed to update name.');
+        setProfileErrorMsg(err.detail || 'Failed to update profile.');
       }
     } catch (err) {
       setProfileErrorMsg('Network error.');
@@ -1476,27 +1489,31 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               {/* Profile Details & Name Form */}
               <div className="glass-card">
-                <form onSubmit={handleUpdateName}>
+                <form onSubmit={handleUpdateProfile}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                     <div className="form-group">
                       <label className="form-label">{t("profile_username")}</label>
                       <input 
                         type="text" 
                         className="form-input" 
-                        value={user?.username || ''} 
-                        disabled 
-                        style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', cursor: 'not-allowed' }}
+                        value={profileUsername} 
+                        onChange={(e) => setProfileUsername(e.target.value)}
+                        required
                       />
                     </div>
                     <div className="form-group">
                       <label className="form-label">{t("profile_role")}</label>
-                      <input 
-                        type="text" 
-                        className="form-input" 
-                        value={user?.role === 'manager' ? t('role_manager') : t('role_inspector')} 
-                        disabled 
-                        style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-muted)', cursor: 'not-allowed' }}
-                      />
+                      <select 
+                        className="form-select" 
+                        value={profileRole} 
+                        onChange={(e) => setProfileRole(e.target.value)}
+                        required
+                        disabled
+                        style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                      >
+                        <option value="inspector">{t('role_inspector')}</option>
+                        <option value="manager">{t('role_manager')}</option>
+                      </select>
                     </div>
                   </div>
 
