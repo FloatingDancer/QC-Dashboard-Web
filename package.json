@@ -1,0 +1,7 @@
+{
+  "name": "qc-dashboard-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "npm run build --prefix frontend"
+  }
+}
