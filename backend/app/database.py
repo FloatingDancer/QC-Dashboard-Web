@@ -1,26 +1,35 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from fastapi import Request
-from typing import Optional
 
-import os
+# Connect to database (either PostgreSQL from env, or fallback to SQLite)
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if DATABASE_URL:
+    # SQLAlchemy requires postgresql:// instead of postgres://
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    engine = create_engine(DATABASE_URL)
+else:
+    # Local SQLite
+    if os.environ.get("VERCEL"):
+        db_path = "/tmp/qc_dashboard.db"
+    else:
+        db_path = "./qc_dashboard.db"
+    SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    )
 
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Guest database (isolated local SQLite for security)
 if os.environ.get("VERCEL"):
-    db_path = "/tmp/qc_dashboard.db"
     guest_db_path = "/tmp/qc_guest.db"
 else:
-    db_path = "./qc_dashboard.db"
     guest_db_path = "./qc_guest.db"
-
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
 SQLALCHEMY_GUEST_DATABASE_URL = f"sqlite:///{guest_db_path}"
-
-# connect_args={"check_same_thread": False} is required only for SQLite
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 guest_engine = create_engine(
     SQLALCHEMY_GUEST_DATABASE_URL, connect_args={"check_same_thread": False}
