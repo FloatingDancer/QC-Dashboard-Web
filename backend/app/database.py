@@ -4,8 +4,17 @@ from sqlalchemy.orm import sessionmaker
 from fastapi import Request
 from typing import Optional
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./qc_dashboard.db"
-SQLALCHEMY_GUEST_DATABASE_URL = "sqlite:///./qc_guest.db"
+import os
+
+if os.environ.get("VERCEL"):
+    db_path = "/tmp/qc_dashboard.db"
+    guest_db_path = "/tmp/qc_guest.db"
+else:
+    db_path = "./qc_dashboard.db"
+    guest_db_path = "./qc_guest.db"
+
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
+SQLALCHEMY_GUEST_DATABASE_URL = f"sqlite:///{guest_db_path}"
 
 # connect_args={"check_same_thread": False} is required only for SQLite
 engine = create_engine(
