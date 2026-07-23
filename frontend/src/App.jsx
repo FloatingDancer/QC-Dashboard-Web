@@ -418,16 +418,10 @@ export default function App() {
 
   const fetchDashboardData = async () => {
     setLoadingDashboard(true);
-    if (selectedProductId) {
-      setLoadingChart(true);
-    }
     try {
       const promises = [
         apiFetch('/api/dashboard/summary').then(async res => {
           if (res.ok) setSummary(await res.json());
-        }),
-        apiFetch(`/api/dashboard/defect-distribution${selectedProductId ? `?product_id=${selectedProductId}` : ''}`).then(async res => {
-          if (res.ok) setDefectDistData(await res.json());
         }),
         apiFetch('/api/dashboard/vendor-ratings').then(async res => {
           if (res.ok) setVendorRatings(await res.json());
@@ -437,20 +431,11 @@ export default function App() {
         })
       ];
 
-      if (selectedProductId) {
-        promises.push(
-          apiFetch(`/api/dashboard/control-chart?product_id=${selectedProductId}`).then(async res => {
-            if (res.ok) setControlChartData(await res.json());
-          })
-        );
-      }
-
       await Promise.all(promises);
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     } finally {
       setLoadingDashboard(false);
-      setLoadingChart(false);
     }
   };
 
