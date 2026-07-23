@@ -274,12 +274,20 @@ const translations = {
 };
 
 export default function App() {
+  useEffect(() => {
+    document.title = "KAT QC Dashboard";
+  }, []);
   const [lang, setLang] = useState(() => localStorage.getItem('qc_lang') || 'id');
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
   const [token, setToken] = useState(() => localStorage.getItem('qc_token') || '');
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(!!localStorage.getItem('qc_token'));
+  const [inspectorsList, setInspectorsList] = useState([]);
+  const [newInspFullName, setNewInspFullName] = useState('');
+  const [newInspUsername, setNewInspUsername] = useState('');
+  const [newInspPassword, setNewInspPassword] = useState('');
+  const [addingInsp, setAddingInsp] = useState(false);
 
   // Login form state
   const [loginUsername, setLoginUsername] = useState('');
@@ -357,10 +365,11 @@ export default function App() {
   const totalPages = Math.ceil(history.length / pageSize) || 1;
   const paginatedHistory = history.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Initial products fetch
+  // Initial data fetch (products & inspectors)
   useEffect(() => {
     if (user) {
       fetchProducts();
+      fetchInspectors();
     }
   }, [user]);
 
@@ -395,64 +404,68 @@ export default function App() {
     }
   };
 
+  const fetchInspectors = async () => {
+    try {
+      const res = await apiFetch('/api/qc/inspectors');
+      if (res.ok) {
+        const data = await res.json();
+        setInspectorsList(data);
+      }
+    } catch (err) {
+      console.error("Error fetching inspectors:", err);
+    }
+  };
+
   const fetchDashboardData = async () => {
     setLoadingDashboard(true);
+    if (selectedProductId) {
+      setLoadingChart(true);
+    }
     try {
-      // 1. Fetch summary
-      const summaryRes = await apiFetch('/api/dashboard/summary');
-      if (summaryRes.ok) {
-        const summaryData = await summaryRes.json();
-        setSummary(summaryData);
-      }
+      const promises = [
+        apiFetch('/api/dashboard/summary').then(async res => {
+          if (res.ok) setSummary(await res.json());
+        }),
+        apiFetch(`/api/dashboard/defect-distribution${selectedProductId ? `?product_id=${selectedProductId}` : ''}`).then(async res => {
+          if (res.ok) setDefectDistData(await res.json());
+        }),
+        apiFetch('/api/dashboard/vendor-ratings').then(async res => {
+          if (res.ok) setVendorRatings(await res.json());
+        }),
+        apiFetch('/api/qc/history').then(async res => {
+          if (res.ok) setHistory(await res.json());
+        })
+      ];
 
-      // 2. Fetch Pareto data (filtered dynamically if product selected, otherwise overall)
-      const defectRes = await apiFetch(`/api/dashboard/defect-distribution${selectedProductId ? `?product_id=${selectedProductId}` : ''}`);
-      if (defectRes.ok) {
-        const defectData = await defectRes.json();
-        setDefectDistData(defectData);
-      }
-
-      // 3. Fetch vendor ratings
-      const vendorRes = await apiFetch('/api/dashboard/vendor-ratings');
-      if (vendorRes.ok) {
-        const vendorData = await vendorRes.json();
-        setVendorRatings(vendorData);
-      }
-
-      // 4. Fetch history log
-      const historyRes = await apiFetch('/api/qc/history');
-      if (historyRes.ok) {
-        const historyData = await historyRes.json();
-        setHistory(historyData);
-      }
-
-      // 5. Fetch chart for selected product
       if (selectedProductId) {
-        fetchChartData(selectedProductId);
+        promises.push(
+          apiFetch(`/api/dashboard/control-chart?product_id=${selectedProductId}`).then(async res => {
+            if (res.ok) setControlChartData(await res.json());
+          })
+        );
       }
+
+      await Promise.all(promises);
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     } finally {
       setLoadingDashboard(false);
+      setLoadingChart(false);
     }
   };
 
   const fetchChartData = async (productId) => {
     setLoadingChart(true);
     try {
-      // Fetch Control Chart data
-      const res = await apiFetch(`/api/dashboard/control-chart?product_id=${productId}`);
-      if (res.ok) {
-        const chartData = await res.json();
-        setControlChartData(chartData);
-      }
-      
-      // Fetch Dynamic defect Pareto for this product
-      const defectRes = await apiFetch(`/api/dashboard/defect-distribution?product_id=${productId}`);
-      if (defectRes.ok) {
-        const defectData = await defectRes.json();
-        setDefectDistData(defectData);
-      }
+      const promises = [
+        apiFetch(`/api/dashboard/control-chart?product_id=${productId}`).then(async res => {
+          if (res.ok) setControlChartData(await res.json());
+        }),
+        apiFetch(`/api/dashboard/defect-distribution?product_id=${productId}`).then(async res => {
+          if (res.ok) setDefectDistData(await res.json());
+        })
+      ];
+      await Promise.all(promises);
     } catch (err) {
       console.error("Error fetching chart data:", err);
     } finally {
@@ -539,6 +552,48 @@ export default function App() {
       fetchProducts();
     } catch (err) {
       setConfigError(err.message);
+    }
+  };
+
+  const handleCreateInspector = async (e) => {
+    e.preventDefault();
+    setConfigError('');
+    setConfigSuccess('');
+    
+    if (!newInspFullName || !newInspUsername || !newInspPassword) {
+      setConfigError('Semua field wajib diisi untuk membuat inspektur baru.');
+      return;
+    }
+    
+    setAddingInsp(true);
+    const payload = {
+      username: newInspUsername,
+      password: newInspPassword,
+      full_name: newInspFullName,
+      role: 'inspector'
+    };
+    
+    try {
+      const res = await apiFetch('/api/qc/inspectors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Gagal menambahkan inspektur baru.');
+      }
+      
+      setConfigSuccess('Inspektur baru berhasil ditambahkan!');
+      setNewInspFullName('');
+      setNewInspUsername('');
+      setNewInspPassword('');
+      fetchInspectors();
+    } catch (err) {
+      setConfigError(err.message);
+    } finally {
+      setAddingInsp(false);
     }
   };
 
@@ -1249,6 +1304,7 @@ export default function App() {
         {currentTab === 'input' && (
           <InspectionForm 
             products={products} 
+            inspectorsList={inspectorsList}
             onSubmitSuccess={() => {
               // Redirect to dashboard tab after a small delay to see the success message
               setTimeout(() => {
@@ -1439,6 +1495,86 @@ export default function App() {
                 </form>
               </div>
 
+            </div>
+
+            {/* Kelola Inspektur Section */}
+            <div style={{ marginTop: '40px', borderTop: '1px solid var(--border-color)', paddingTop: '32px' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '8px' }}>Kelola Inspektur</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '24px' }}>
+                Tambah atau lihat daftar inspektur QC yang bertugas melakukan pengecekan produk.
+              </p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+                {/* Kolom 1: Daftar Inspektur */}
+                <div className="glass-card">
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '16px' }}>Daftar Inspektur Aktif</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {inspectorsList.map((name, idx) => (
+                      <div key={idx} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '12px 16px',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)'
+                      }}>
+                        <span style={{ fontWeight: 500 }}>{name}</span>
+                        <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>Aktif</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Kolom 2: Form Tambah Inspektur */}
+                <div className="glass-card">
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '16px' }}>Tambah Inspektur Baru</h3>
+                  <form onSubmit={handleCreateInspector}>
+                    <div className="form-group">
+                      <label className="form-label">Nama Lengkap (Ditampilkan di Dropdown)</label>
+                      <input 
+                        type="text" 
+                        className="form-input"
+                        placeholder="Contoh: Alpih"
+                        value={newInspFullName}
+                        onChange={(e) => setNewInspFullName(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Username (Untuk Login)</label>
+                      <input 
+                        type="text" 
+                        className="form-input"
+                        placeholder="Contoh: alpih"
+                        value={newInspUsername}
+                        onChange={(e) => setNewInspUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Password</label>
+                      <input 
+                        type="password" 
+                        className="form-input"
+                        placeholder="Masukkan password akun baru"
+                        value={newInspPassword}
+                        onChange={(e) => setNewInspPassword(e.target.value)}
+                        required
+                      />
+                    </div>
+                    
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary" 
+                      style={{ width: '100%', marginTop: '10px' }}
+                      disabled={addingInsp}
+                    >
+                      {addingInsp ? 'Menambahkan...' : 'Simpan Akun Inspektur'}
+                    </button>
+                  </form>
+                </div>
+              </div>
             </div>
           </div>
         )}
